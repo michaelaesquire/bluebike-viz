@@ -21,6 +21,12 @@ from datetime import datetime, timedelta
 
 app = Dash()
 
+## read in station data
+station_data = pd.read_csv("./data/current_bluebikes_stations.csv",
+                           index_col="NAME",
+                           skiprows=1)
+
+
 app.layout = [html.Div(children='Hello World')]
 
 if __name__ == '__main__':
