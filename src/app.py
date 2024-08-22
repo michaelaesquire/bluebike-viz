@@ -28,24 +28,23 @@ station_data = pd.read_csv("../data/current_bluebikes_stations.csv",
 
 ## read in data
 # current config to July 2024
-data_name = "202407-bluebikes-tripdata"
+month = "202407"
+data_name = month + "-bluebikes-tripdata"
 bike_data = pd.read_csv("../data/tripdata/" + data_name +"_cleaned.csv", index_col = 0).dropna()
 
-### this fixes the data
-all_stations = list(set(pd.concat([bike_data["end_station_name"],bike_data["start_station_name"]])))
-
 # get station locations based on averages
-station_locations = pd.read_csv("../data/geospacial_station_data_20240815.csv",
+station_locations = pd.read_csv("../data/geospacial_station_data_" + month + " .csv",
                                 index_col=0)
 # this has the station data
 combined_station_data = station_locations.merge(station_data,
                                                 left_index=True, right_index=True, how = "left")
 # combine city data w ride data
 station_to_city = combined_station_data.to_dict()["City"]
+
 bike_data["Start City"] = [station_to_city[x] for  x in bike_data["start_station_name"]]
 bike_data["End City"] = [station_to_city[x] for  x in bike_data["end_station_name"]]
 
-# tiemes of day
+# times of day
 times_of_day = bike_data["Time of Day"].unique()
 combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
 # if there wasn't any rides started, it'll be nan -> fix
