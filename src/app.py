@@ -26,33 +26,6 @@ station_data = pd.read_csv("../data/current_bluebikes_stations.csv",
                            index_col="NAME",
                            skiprows=1)
 
-## read in data
-# current config to July 2024
-month = "202407"
-data_name = month + "-bluebikes-tripdata"
-bike_data = pd.read_csv("../data/tripdata/" + data_name +"_cleaned.csv", index_col = 0).dropna()
-
-# get station locations based on averages
-station_locations = pd.read_csv("../data/geospacial_station_data_" + month + " .csv",
-                                index_col=0)
-# this has the station data
-combined_station_data = station_locations.merge(station_data,
-                                                left_index=True, right_index=True, how = "left")
-# combine city data w ride data
-station_to_city = combined_station_data.to_dict()["City"]
-
-bike_data["Start City"] = [station_to_city[x] for  x in bike_data["start_station_name"]]
-bike_data["End City"] = [station_to_city[x] for  x in bike_data["end_station_name"]]
-
-# times of day
-times_of_day = bike_data["Time of Day"].unique()
-combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
-# if there wasn't any rides started, it'll be nan -> fix
-combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
-
-for daytime in times_of_day:
-    combined_station_data["Number of Rides Started at " + daytime] = bike_data.loc[bike_data["Time of Day"] == daytime]["start_station_name"].value_counts()
-    combined_station_data["Number of Rides Started at " + daytime] = combined_station_data["Number of Rides Started at " + daytime].fillna(0)
 
 # start mapbox
 maptoken = open(".mapbox").read()
@@ -93,13 +66,7 @@ def strtobr(string, every=25):
 def NormalizeData(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
 
-threshold = 180
-moved = bike_data.loc[bike_data["start_station_name"] != bike_data["end_station_name"]]
-larger_trips = moved["Start End"].value_counts()[moved["Start End"].value_counts() > threshold]
-total_trips = len(larger_trips)
-mintrip = min(larger_trips)
-maxtrip = max(larger_trips)
-norm_trip = NormalizeData(larger_trips)
+
 #### This works for rn
 
 
@@ -116,8 +83,8 @@ app.layout = html.Div(
         ),
         dcc.Dropdown(
             id="type",
-            options=["scatter_mapbox", "scatter_geo"],
-            value="scatter_mapbox",
+            options=["202407", "202402"],
+            value="202407",
             clearable=False,
         ),
     ]
@@ -128,47 +95,81 @@ app.layout = html.Div(
     Input("type", "value"),
 )
 def generate_chart(values):
-    if values == "scatter_mapbox":
-        fig = px.scatter_mapbox(combined_station_data.reset_index(),
-                                lat="lat",
-                                lon="lng",
-                                hover_name="index",
-                                color="City",
-                                hover_data=["index", "Number of Rides Started at Morning"],
-                                # color_continuous_scale=color_scale,
-                                size="Number of Rides Started at Morning",
-                                zoom=11,
-                                height=800,
-                                width=1000)
-        fig.update_traces(
-            hovertemplate=None,
-            hoverinfo='skip'
+    ## read in data
+    # current config to July 2024
+    month = values
+    data_name = values + "-bluebikes-tripdata"
+    bike_data = pd.read_csv("../data/tripdata/" + data_name + "_cleaned.csv", index_col=0).dropna()
+
+    # get station locations based on averages
+    station_locations = pd.read_csv("../data/geospacial_station_data_" + month + ".csv",
+                                    index_col=0)
+    # this has the station data
+    combined_station_data = station_locations.merge(station_data,
+                                                    left_index=True, right_index=True, how="left")
+    # combine city data w ride data
+    station_to_city = combined_station_data.to_dict()["City"]
+
+    bike_data["Start City"] = [station_to_city[x] for x in bike_data["start_station_name"]]
+    bike_data["End City"] = [station_to_city[x] for x in bike_data["end_station_name"]]
+
+    # times of day
+    times_of_day = bike_data["Time of Day"].unique()
+    combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
+    # if there wasn't any rides started, it'll be nan -> fix
+    combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
+
+    for daytime in times_of_day:
+        combined_station_data["Number of Rides Started at " + daytime] = \
+        bike_data.loc[bike_data["Time of Day"] == daytime]["start_station_name"].value_counts()
+        combined_station_data["Number of Rides Started at " + daytime] = combined_station_data[
+            "Number of Rides Started at " + daytime].fillna(0)
+
+    threshold = 180
+    moved = bike_data.loc[bike_data["start_station_name"] != bike_data["end_station_name"]]
+    larger_trips = moved["Start End"].value_counts()[moved["Start End"].value_counts() > threshold]
+
+    norm_trip = NormalizeData(larger_trips)
+
+    fig = px.scatter_mapbox(combined_station_data.reset_index(),
+                            lat="lat",
+                            lon="lng",
+                            hover_name="index",
+                            color="City",
+                            hover_data=["index", "Number of Rides Started at Morning"],
+                            # color_continuous_scale=color_scale,
+                            size="Number of Rides Started at Morning",
+                            zoom=11,
+                            height=800,
+                            width=1000)
+    fig.update_traces(
+        hovertemplate=None,
+        hoverinfo='skip'
+    )
+
+    for trip in larger_trips.index:
+        trip_text = trip + " (" + str(larger_trips[trip]) + " trips)"
+
+        start_station = bike_data.loc[bike_data["Start End"] == trip]["start_station_name"].iloc[0]
+        end_station = bike_data.loc[bike_data["Start End"] == trip]["end_station_name"].iloc[0]
+        fig.add_trace(go.Scattermapbox(
+            name=strtobr(trip_text),
+            mode="lines",
+            lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
+            lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
+            hovertext=strtobr(trip_text),
+            line={'width': (norm_trip[trip] + .3) * 12},
+            showlegend=False),
+
         )
 
-        for trip in larger_trips.index:
-            trip_text = trip + " (" + str(larger_trips[trip]) + " trips)"
+    # fig.update_layout(mapbox_style="open-street-map")
+    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+    # fig.update_traces(mode="lines", hovertemplate=None)
+    # fig.update_layout(hovermode="x")
 
-            start_station = bike_data.loc[bike_data["Start End"] == trip]["start_station_name"].iloc[0]
-            end_station = bike_data.loc[bike_data["Start End"] == trip]["end_station_name"].iloc[0]
-            fig.add_trace(go.Scattermapbox(
-                name=strtobr(trip_text),
-                mode="lines",
-                lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
-                lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
-                hovertext=strtobr(trip_text),
-                line={'width': (norm_trip[trip] + .3) * 12},
-                showlegend=False),
+    # fig.show()
 
-            )
-
-        # fig.update_layout(mapbox_style="open-street-map")
-        fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
-        # fig.update_traces(mode="lines", hovertemplate=None)
-        # fig.update_layout(hovermode="x")
-
-        # fig.show()
-    else:
-        fig = "boo"
     return fig
 
 if __name__ == '__main__':
