@@ -22,6 +22,8 @@ from matplotlib import colormaps
 
 app = Dash()
 
+server = app.server
+
 ## read in station data
 station_data = pd.read_csv("../data/current_bluebikes_stations.csv",
                            index_col="NAME",
