@@ -25,7 +25,24 @@ app = Dash()
 station_data = pd.read_csv("../data/current_bluebikes_stations.csv",
                            index_col="NAME",
                            skiprows=1)
+threshold = 180
 
+# color palette
+city_pal = {"Boston":"#e6194B",
+            "Cambridge":"#4363d8",
+            "Somerville":"#f58231",
+            "Salem":"#a9a9a9",
+            "Brookline":"#42d4f4",
+            "Everett":"#ffe119",
+            "Medford":"#808000",
+            "Watertown":"#469990",
+            "Chelsea":"#f032e6",
+            "Arlington":"#9A6324",
+            "Revere":"#000075",
+            "Malden":"#800000",
+            "Hingham":"#a9a9a9",
+            "Newton":"#911eb4",
+           }
 
 # start mapbox
 maptoken = open(".mapbox").read()
@@ -68,18 +85,15 @@ def NormalizeData(data):
 
 
 #### This works for rn
-
-
 app.layout = html.Div(
     [
-        html.H4("Airports"),
+        html.H4("Bluebikes data"),
         html.P(
-            "px.scatter_geo is used to plot points on globe across geolocations while "
-            "px.scatter_mapbox is used to plot points on map across geolocations."
+            "A look at the used stations and most common trips between stations."
         ),
         dcc.Graph(id="graph"),
         html.P(
-            "Enter the type of graph you want to plot: (scatter_geo or scatter_mapbox)"
+            "Select month to look at data"
         ),
         dcc.Dropdown(
             id="type",
@@ -125,16 +139,12 @@ def generate_chart(values):
         combined_station_data["Number of Rides Started at " + daytime] = combined_station_data[
             "Number of Rides Started at " + daytime].fillna(0)
 
-    threshold = 180
-    moved = bike_data.loc[bike_data["start_station_name"] != bike_data["end_station_name"]]
-    larger_trips = moved["Start End"].value_counts()[moved["Start End"].value_counts() > threshold]
-
-    norm_trip = NormalizeData(larger_trips)
 
     fig = px.scatter_mapbox(combined_station_data.reset_index(),
                             lat="lat",
                             lon="lng",
                             hover_name="index",
+                            color_discrete_map=city_pal,
                             color="City",
                             hover_data=["index", "Number of Rides Started at Morning"],
                             # color_continuous_scale=color_scale,
@@ -147,6 +157,9 @@ def generate_chart(values):
         hoverinfo='skip'
     )
 
+    moved = bike_data.loc[bike_data["start_station_name"] != bike_data["end_station_name"]]
+    larger_trips = moved["Start End"].value_counts()[moved["Start End"].value_counts() > threshold]
+    norm_trip = NormalizeData(larger_trips)
     for trip in larger_trips.index:
         trip_text = trip + " (" + str(larger_trips[trip]) + " trips)"
 
@@ -154,6 +167,7 @@ def generate_chart(values):
         end_station = bike_data.loc[bike_data["Start End"] == trip]["end_station_name"].iloc[0]
         fig.add_trace(go.Scattermapbox(
             name=strtobr(trip_text),
+            opacity = 0.5,
             mode="lines",
             lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
             lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
