@@ -10,7 +10,8 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 #import random
-#import matplotlib.colors as mcolors
+import matplotlib.colors as mcolors
+from matplotlib import colormaps
 #from matplotlib.patches import Patch
 #from matplotlib.colors import LogNorm, Normalize
 
@@ -47,6 +48,39 @@ city_pal = {"Boston":"#e6194B",
 # start mapbox
 maptoken = open(".mapbox").read()
 px.set_mapbox_access_token(maptoken)
+
+# read and format data
+month = "202407"
+data_name = month + "-bluebikes-tripdata"
+bike_data = pd.read_csv("../data/tripdata/" + data_name + "_cleaned.csv", index_col=0).dropna()
+
+# get station locations based on averages
+station_locations = pd.read_csv("../data/geospacial_station_data_" + month + ".csv",
+                                index_col=0)
+# this has the station data
+combined_station_data = station_locations.merge(station_data,
+                                                left_index=True, right_index=True, how="left")
+# combine city data w ride data
+station_to_city = combined_station_data.to_dict()["City"]
+
+bike_data["Start City"] = [station_to_city[x] for x in bike_data["start_station_name"]]
+bike_data["End City"] = [station_to_city[x] for x in bike_data["end_station_name"]]
+
+# times of day
+times_of_day = bike_data["Time of Day"].unique()
+combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
+# if there wasn't any rides started, it'll be nan -> fix
+combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
+
+for daytime in times_of_day:
+    combined_station_data["Number of Rides Started at " + daytime] = \
+    bike_data.loc[bike_data["Time of Day"] == daytime]["start_station_name"].value_counts()
+    combined_station_data["Number of Rides Started at " + daytime] = combined_station_data[
+        "Number of Rides Started at " + daytime].fillna(0)
+
+# get the stations in order of most used
+most_used_order = combined_station_data.sort_values("Number of Rides Started", ascending=False).index
+
 
 # functions for formatting
 def replacer(s, newstring, index, nofail=False):
@@ -91,16 +125,18 @@ app.layout = html.Div(
         html.P(
             "A look at the used stations and most common trips between stations."
         ),
-        dcc.Graph(id="graph"),
         html.P(
-            "Select month to look at data"
+            "Select origin station."
         ),
         dcc.Dropdown(
             id="type",
-            options=["202407", "202402"],
-            value="202407",
+            options=list(most_used_order),
+            value=most_used_order[0],
             clearable=False,
         ),
+        dcc.Graph(id="graph"),
+
+
     ]
 )
 
@@ -108,37 +144,9 @@ app.layout = html.Div(
     Output("graph", "figure"),
     Input("type", "value"),
 )
-def generate_chart(values):
+def generate_chart(target_station):
     ## read in data
     # current config to July 2024
-    month = values
-    data_name = values + "-bluebikes-tripdata"
-    bike_data = pd.read_csv("../data/tripdata/" + data_name + "_cleaned.csv", index_col=0).dropna()
-
-    # get station locations based on averages
-    station_locations = pd.read_csv("../data/geospacial_station_data_" + month + ".csv",
-                                    index_col=0)
-    # this has the station data
-    combined_station_data = station_locations.merge(station_data,
-                                                    left_index=True, right_index=True, how="left")
-    # combine city data w ride data
-    station_to_city = combined_station_data.to_dict()["City"]
-
-    bike_data["Start City"] = [station_to_city[x] for x in bike_data["start_station_name"]]
-    bike_data["End City"] = [station_to_city[x] for x in bike_data["end_station_name"]]
-
-    # times of day
-    times_of_day = bike_data["Time of Day"].unique()
-    combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
-    # if there wasn't any rides started, it'll be nan -> fix
-    combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
-
-    for daytime in times_of_day:
-        combined_station_data["Number of Rides Started at " + daytime] = \
-        bike_data.loc[bike_data["Time of Day"] == daytime]["start_station_name"].value_counts()
-        combined_station_data["Number of Rides Started at " + daytime] = combined_station_data[
-            "Number of Rides Started at " + daytime].fillna(0)
-
 
     fig = px.scatter_mapbox(combined_station_data.reset_index(),
                             lat="lat",
@@ -157,23 +165,25 @@ def generate_chart(values):
         hoverinfo='skip'
     )
 
-    moved = bike_data.loc[bike_data["start_station_name"] != bike_data["end_station_name"]]
-    larger_trips = moved["Start End"].value_counts()[moved["Start End"].value_counts() > threshold]
-    norm_trip = NormalizeData(larger_trips)
-    for trip in larger_trips.index:
-        trip_text = trip + " (" + str(larger_trips[trip]) + " trips)"
-
-        start_station = bike_data.loc[bike_data["Start End"] == trip]["start_station_name"].iloc[0]
-        end_station = bike_data.loc[bike_data["Start End"] == trip]["end_station_name"].iloc[0]
+    trips_to = bike_data.loc[bike_data["start_station_name"] == target_station]["end_station_name"].value_counts()
+    norm_trip2 = NormalizeData(trips_to)
+    cmap = colormaps["magma"]
+    trips_to = trips_to.loc[trips_to > 8]
+    start_station = target_station
+    for trip in reversed(trips_to.index):
+        trip_text = trip + " (" + str(trips_to[trip]) + " trips)"
+        end_station = trip
         fig.add_trace(go.Scattermapbox(
             name=strtobr(trip_text),
-            opacity = 0.5,
             mode="lines",
+            opacity=0.8,
             lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
             lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
             hovertext=strtobr(trip_text),
-            line={'width': (norm_trip[trip] + .3) * 12},
-            showlegend=False),
+            line={'width': np.floor(trips_to[trip] / 10 + 1),
+                  "color": mcolors.rgb2hex(cmap(norm_trip2[trip]))},
+            showlegend=False
+        ),
 
         )
 
