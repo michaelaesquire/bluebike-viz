@@ -14,7 +14,7 @@ import matplotlib.colors as mcolors
 from matplotlib import colormaps
 #from matplotlib.patches import Patch
 #from matplotlib.colors import LogNorm, Normalize
-
+import json
 #from meteostat import Point, Daily, Hourly
 
 #from datetime import datetime, timedelta
@@ -28,7 +28,7 @@ server = app.server
 station_data = pd.read_csv("../data/current_bluebikes_stations.csv",
                            index_col="NAME",
                            skiprows=1)
-threshold = 180
+threshold = 8
 
 # color palette
 city_pal = {"Boston":"#e6194B",
@@ -119,36 +119,50 @@ def strtobr(string, every=25):
 def NormalizeData(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
 
-
+styles = {
+    'pre': {
+        'border': 'thin lightgrey solid',
+        'overflowX': 'scroll'
+    }
+}
 #### This works for rn
 app.layout = html.Div(
     [
-        html.H4("Bluebikes data"),
+        html.H3("Bluebikes data"),
         html.P(
-            "A look at the used stations and most common trips between stations."
+            "Click on a station to see all of the destinations from that station. (min " + str(threshold) + " trips)"
         ),
-        html.P(
-            "Select origin station."
-        ),
-        dcc.Dropdown(
-            id="type",
-            options=list(most_used_order),
-            value=most_used_order[0],
-            clearable=False,
-        ),
-        dcc.Graph(id="graph"),
+        # html.P(
+        #     "Select origin station."
+        # ),
+        # dcc.Dropdown(
+        #     id="type",
+        #     options=list(most_used_order),
+        #     value=most_used_order[0],
+        #     clearable=False,
+        # ),
+   #     dcc.Graph(id="graph"),
+        dcc.Graph(id="graph2"),
+       # html.Div(className='row', children=[
+       #  html.Div([
+       #      dcc.Markdown("""
+       #          **Hover Data**
+       #
+       #          Click on points in the graph.
+       #      """),
+       #      html.Pre(id='click-data', style=styles['pre'])
+       #  ], className='three columns')]
+       #           )
 
 
     ]
 )
 
+
 @app.callback(
-    Output("graph", "figure"),
-    Input("type", "value"),
-)
-def generate_chart(target_station):
-    ## read in data
-    # current config to July 2024
+    Output('graph2', 'figure'),
+    Input('graph2', 'clickData'))
+def display_bike_trips(clickData):
 
     fig = px.scatter_mapbox(combined_station_data.reset_index(),
                             lat="lat",
@@ -156,47 +170,102 @@ def generate_chart(target_station):
                             hover_name="index",
                             color_discrete_map=city_pal,
                             color="City",
-                            hover_data=["index", "Number of Rides Started at Morning"],
-                            # color_continuous_scale=color_scale,
-                            size="Number of Rides Started at Morning",
+                            hover_data="index",
+                            size="Number of Rides Started",
                             zoom=11,
                             height=800,
                             width=1000)
-    fig.update_traces(
-        hovertemplate=None,
-        hoverinfo='skip'
-    )
 
-    trips_to = bike_data.loc[bike_data["start_station_name"] == target_station]["end_station_name"].value_counts()
-    norm_trip2 = NormalizeData(trips_to)
-    cmap = colormaps["magma"]
-    trips_to = trips_to.loc[trips_to > 8]
-    start_station = target_station
-    for trip in reversed(trips_to.index):
-        trip_text = trip + " (" + str(trips_to[trip]) + " trips)"
-        end_station = trip
-        fig.add_trace(go.Scattermapbox(
-            name=strtobr(trip_text),
-            mode="lines",
-            opacity=0.8,
-            lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
-            lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
-            hovertext=strtobr(trip_text),
-            line={'width': np.floor(trips_to[trip] / 10 + 1),
-                  "color": mcolors.rgb2hex(cmap(norm_trip2[trip]))},
-            showlegend=False
-        ),
+    if clickData is not None:
 
-        )
+        if isinstance(clickData["points"][0]["customdata"], str):
+            target_station = clickData["points"][0]["customdata"]
+        else:
+            target_station = clickData["points"][0]["customdata"][0]
 
-    # fig.update_layout(mapbox_style="open-street-map")
-    fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
-    # fig.update_traces(mode="lines", hovertemplate=None)
-    # fig.update_layout(hovermode="x")
+        trips_to = bike_data.loc[bike_data["start_station_name"] == target_station]["end_station_name"].value_counts()
+        norm_trip2 = NormalizeData(trips_to)
+        cmap = colormaps["magma"]
+        trips_to = trips_to.loc[trips_to > threshold]
+        start_station = target_station
+        for trip in reversed(trips_to.index):
+            trip_text = trip + " (" + str(trips_to[trip]) + " trips)"
+            end_station = trip
+            fig.add_trace(go.Scattermapbox(
+                name=strtobr(trip_text),
+                mode="lines",
+                opacity=0.8,
+                customdata=[start_station, end_station],
+                lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
+                lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
+                hovertext=strtobr(trip_text),
+                line={'width': np.floor(trips_to[trip] / 10 + 1),
+                      "color": mcolors.rgb2hex(cmap(norm_trip2[trip]))},
+                showlegend=False
+            ),
 
-    # fig.show()
-
+            )
     return fig
+
+
+
+# @app.callback(
+#     Output("graph", "figure"),
+#     Input("type", "value"),
+# )
+#
+# def generate_chart(target_station):
+#     ## read in data
+#     # current config to July 2024
+#
+#     fig = px.scatter_mapbox(combined_station_data.reset_index(),
+#                             lat="lat",
+#                             lon="lng",
+#                             hover_name="index",
+#                             color_discrete_map=city_pal,
+#                             color="City",
+#                             hover_data=["index", "Number of Rides Started"],
+#                             # color_continuous_scale=color_scale,
+#                             size="Number of Rides Started",
+#                             zoom=11,
+#                             height=800,
+#                             width=1000)
+#     # fig.update_traces(
+#     #     hovertemplate=None,
+#     #     hoverinfo='skip'
+#     # )
+#
+#     trips_to = bike_data.loc[bike_data["start_station_name"] == target_station]["end_station_name"].value_counts()
+#     norm_trip2 = NormalizeData(trips_to)
+#     cmap = colormaps["magma"]
+#     trips_to = trips_to.loc[trips_to > 8]
+#     start_station = target_station
+#     for trip in reversed(trips_to.index):
+#         trip_text = trip + " (" + str(trips_to[trip]) + " trips)"
+#         end_station = trip
+#         fig.add_trace(go.Scattermapbox(
+#             name=strtobr(trip_text),
+#             mode="lines",
+#             opacity=0.8,
+#             customdata=[start_station, end_station],
+#             lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
+#             lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
+#             hovertext=strtobr(trip_text),
+#             line={'width': np.floor(trips_to[trip] / 10 + 1),
+#                   "color": mcolors.rgb2hex(cmap(norm_trip2[trip]))},
+#             showlegend=False
+#             ),
+#
+#         )
+#
+#     # fig.update_layout(mapbox_style="open-street-map")
+#     #fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+#     # fig.update_traces(mode="lines", hovertemplate=None)
+#     # fig.update_layout(hovermode="x")
+#
+#     # fig.show()
+#
+#     return fig
 
 if __name__ == '__main__':
     app.run(debug=True)
