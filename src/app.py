@@ -182,9 +182,12 @@ def display_click_data(clickData):
             start_station = clickData["points"][0]["customdata"]
         else:
             start_station = clickData["points"][0]["customdata"][0]
+
+      #  print(combined_station_data.loc[start_station,"Number of Rides Started"])
+        printstr = "Origin: " + start_station + " (" + str(int(combined_station_data.loc[start_station,"Number of Rides Started"])) + " total trips)"
     else:
-        start_station = "Select a station on the map to continue"
-    return start_station
+        printstr = "Select a station on the map to continue"
+    return printstr
 
 @app.callback(
     Output(dtable, "data"),
