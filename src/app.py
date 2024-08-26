@@ -139,6 +139,9 @@ dtable = dash_table.DataTable(
     sort_action="native",
     page_size=10,
     style_table={"overflowX": "auto"},
+    style_cell={
+        'textAlign': 'left'
+    }
 )
 #print(df)
 
@@ -160,26 +163,28 @@ app.layout = html.Div(
    #     dcc.Graph(id="graph"),
         dcc.Graph(id="graph2"),
 
-        # html.Div(className='row', children=[
-        #     html.Div([
-        #         dcc.Markdown("""
-        #             **Hover Data**
-        #
-        #             Click on points in the graph.
-        #         """),
-        #         html.Pre(id='click-data', style=styles['pre'])
-        #     ], className='three columns')]
-        # )
+        html.Div(className='row', children=[
+            html.Div([
+                html.Pre(id='click-data', style=styles['pre'])
+            ], className='three columns')]
+        ),
         dtable
 
     ]
 )
 
-# @app.callback(
-#     Output('click-data', 'children'),
-#     Input('graph2', 'clickData'))
-# def display_click_data(clickData):
-#     return json.dumps(clickData, indent=2)
+@app.callback(
+    Output('click-data', 'children'),
+    Input('graph2', 'clickData'))
+def display_click_data(clickData):
+    if clickData is not None:
+        if isinstance(clickData["points"][0]["customdata"], str):
+            start_station = clickData["points"][0]["customdata"]
+        else:
+            start_station = clickData["points"][0]["customdata"][0]
+    else:
+        start_station = "Select a station on the map to continue"
+    return start_station
 
 @app.callback(
     Output(dtable, "data"),
