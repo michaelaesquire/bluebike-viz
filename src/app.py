@@ -1,4 +1,4 @@
-from dash import Dash, html, dcc, Input, Output
+from dash import Dash, html, dcc, Input, Output, dash_table
 import pandas as pd
 #import seaborn as sns
 #import matplotlib.pyplot as plt
@@ -19,6 +19,10 @@ import json
 
 #from datetime import datetime, timedelta
 
+# TODO: Dropdown for day of the week?
+# TODO: add dynamic spreadsheet of the destinations
+
+
 
 app = Dash()
 
@@ -29,6 +33,7 @@ station_data = pd.read_csv("../data/current_bluebikes_stations.csv",
                            index_col="NAME",
                            skiprows=1)
 threshold = 8
+cmap = colormaps["magma"]
 
 # color palette
 city_pal = {"Boston":"#e6194B",
@@ -65,8 +70,8 @@ combined_station_data = station_locations.merge(station_data,
 # combine city data w ride data
 station_to_city = combined_station_data.to_dict()["City"]
 
-bike_data["Start City"] = [station_to_city[x] for x in bike_data["start_station_name"]]
-bike_data["End City"] = [station_to_city[x] for x in bike_data["end_station_name"]]
+#bike_data["Start City"] = [station_to_city[x] for x in bike_data["start_station_name"]]
+#bike_data["End City"] = [station_to_city[x] for x in bike_data["end_station_name"]]
 
 # times of day
 times_of_day = bike_data["Time of Day"].unique()
@@ -125,16 +130,27 @@ styles = {
         'overflowX': 'scroll'
     }
 }
+
+df = combined_station_data.reset_index()[["index","Number of Rides Started"]].copy().sort_values("Number of Rides Started",
+                                                                                                 ascending=False).rename(columns={"index":"Origin Station","Number of Rides Started":"trips"})
+#### set this as global so it can be updated elsewhere
+dtable = dash_table.DataTable(
+  #  columns=[{"name": i, "id": i} for i in df.columns],
+    sort_action="native",
+    page_size=10,
+    style_table={"overflowX": "auto"},
+)
+#print(df)
+
+
 #### This works for rn
 app.layout = html.Div(
     [
-        html.H3("Bluebikes data"),
+        html.H3("Bluebikes July 2024 data"),
         html.P(
-            "Click on a station to see all of the destinations from that station. (min " + str(threshold) + " trips)"
+            "Click on a station to see all of the destinations from that station (min " + str(threshold) + " trips)"
         ),
-        # html.P(
-        #     "Select origin station."
-        # ),
+
         # dcc.Dropdown(
         #     id="type",
         #     options=list(most_used_order),
@@ -143,27 +159,52 @@ app.layout = html.Div(
         # ),
    #     dcc.Graph(id="graph"),
         dcc.Graph(id="graph2"),
-       # html.Div(className='row', children=[
-       #  html.Div([
-       #      dcc.Markdown("""
-       #          **Hover Data**
-       #
-       #          Click on points in the graph.
-       #      """),
-       #      html.Pre(id='click-data', style=styles['pre'])
-       #  ], className='three columns')]
-       #           )
 
+        # html.Div(className='row', children=[
+        #     html.Div([
+        #         dcc.Markdown("""
+        #             **Hover Data**
+        #
+        #             Click on points in the graph.
+        #         """),
+        #         html.Pre(id='click-data', style=styles['pre'])
+        #     ], className='three columns')]
+        # )
+        dtable
 
     ]
 )
+
+# @app.callback(
+#     Output('click-data', 'children'),
+#     Input('graph2', 'clickData'))
+# def display_click_data(clickData):
+#     return json.dumps(clickData, indent=2)
+
+@app.callback(
+    Output(dtable, "data"),
+    Input('graph2', 'clickData'))
+def update_data_table(clickData):
+    if clickData is not None:
+        if isinstance(clickData["points"][0]["customdata"], str):
+            start_station = clickData["points"][0]["customdata"]
+        else:
+            start_station = clickData["points"][0]["customdata"][0]
+
+        trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
+
+        report = trips_to.reset_index().rename(columns={"end_station_name":"Destination Station",
+                                                     "count":"Trips"})
+    else:
+        report = df
+
+    return(report.to_dict("records"))
 
 
 @app.callback(
     Output('graph2', 'figure'),
     Input('graph2', 'clickData'))
 def display_bike_trips(clickData):
-
     fig = px.scatter_mapbox(combined_station_data.reset_index(),
                             lat="lat",
                             lon="lng",
@@ -179,17 +220,16 @@ def display_bike_trips(clickData):
     if clickData is not None:
 
         if isinstance(clickData["points"][0]["customdata"], str):
-            target_station = clickData["points"][0]["customdata"]
+            start_station = clickData["points"][0]["customdata"]
         else:
-            target_station = clickData["points"][0]["customdata"][0]
+            start_station = clickData["points"][0]["customdata"][0]
 
-        trips_to = bike_data.loc[bike_data["start_station_name"] == target_station]["end_station_name"].value_counts()
+        trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
         norm_trip2 = NormalizeData(trips_to)
-        cmap = colormaps["magma"]
-        trips_to = trips_to.loc[trips_to > threshold]
-        start_station = target_station
-        for trip in reversed(trips_to.index):
-            trip_text = trip + " (" + str(trips_to[trip]) + " trips)"
+        trips_to_above = trips_to.loc[trips_to > threshold]
+
+        for trip in reversed(trips_to_above.index):
+            trip_text = trip + " (" + str(trips_to_above[trip]) + " trips)"
             end_station = trip
             fig.add_trace(go.Scattermapbox(
                 name=strtobr(trip_text),
@@ -199,7 +239,7 @@ def display_bike_trips(clickData):
                 lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
                 lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
                 hovertext=strtobr(trip_text),
-                line={'width': np.floor(trips_to[trip] / 10 + 1),
+                line={'width': np.floor(trips_to_above[trip] / 10 + 1),
                       "color": mcolors.rgb2hex(cmap(norm_trip2[trip]))},
                 showlegend=False
             ),
