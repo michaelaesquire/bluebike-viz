@@ -16,6 +16,9 @@ from matplotlib import colormaps
 #from matplotlib.colors import LogNorm, Normalize
 import json
 #from meteostat import Point, Daily, Hourly
+import zipfile
+import requests
+import io
 
 #from datetime import datetime, timedelta
 
@@ -57,9 +60,16 @@ maptoken = open(".mapbox").read()
 px.set_mapbox_access_token(maptoken)
 
 # read and format data
+datapath = "https://s3.amazonaws.com/hubway-data/202407-bluebikes-tripdata.zip"
+r = requests.get(datapath)
+z = zipfile.ZipFile(io.BytesIO(r.content))
+for name in z.namelist():
+    if "__MACOSX" not in name:
+        csv_extract = name
 month = "202407"
 data_name = month + "-bluebikes-tripdata"
-bike_data = pd.read_csv("../data/tripdata/" + data_name + "_cleaned.csv", index_col=0).dropna()
+#bike_data = pd.read_csv("../data/tripdata/" + data_name + "_cleaned.csv", index_col=0).dropna()
+bike_data = pd.read_csv(z.open(csv_extract), index_col = 0)
 
 # get station locations based on averages
 station_locations = pd.read_csv("../data/geospacial_station_data_" + month + ".csv",
@@ -74,16 +84,16 @@ station_to_city = combined_station_data.to_dict()["City"]
 #bike_data["End City"] = [station_to_city[x] for x in bike_data["end_station_name"]]
 
 # times of day
-times_of_day = bike_data["Time of Day"].unique()
+#times_of_day = bike_data["Time of Day"].unique()
 combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
 # if there wasn't any rides started, it'll be nan -> fix
 combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
 
-for daytime in times_of_day:
-    combined_station_data["Number of Rides Started at " + daytime] = \
-    bike_data.loc[bike_data["Time of Day"] == daytime]["start_station_name"].value_counts()
-    combined_station_data["Number of Rides Started at " + daytime] = combined_station_data[
-        "Number of Rides Started at " + daytime].fillna(0)
+# for daytime in times_of_day:
+#     combined_station_data["Number of Rides Started at " + daytime] = \
+#     bike_data.loc[bike_data["Time of Day"] == daytime]["start_station_name"].value_counts()
+#     combined_station_data["Number of Rides Started at " + daytime] = combined_station_data[
+#         "Number of Rides Started at " + daytime].fillna(0)
 
 # get the stations in order of most used
 most_used_order = combined_station_data.sort_values("Number of Rides Started", ascending=False).index
