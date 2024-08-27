@@ -24,12 +24,9 @@ import xml.etree.ElementTree as ET
 #from datetime import datetime, timedelta
 
 # TODO: Dropdown for day of the week?
-# TODO: add dynamic spreadsheet of the destinations
-
-
+# TODO: Fix station list to have all.
 
 app = Dash()
-
 server = app.server
 
 ## read in station data
@@ -140,7 +137,7 @@ month = "202407"
 bike_data = get_bike_data(tripdata[tripmonth])
 
 # get station locations based on averages
-station_locations = pd.read_csv("../data/geospacial_station_data_" + month + ".csv",
+station_locations = pd.read_csv("../data/geospacial_station_data.csv",
                                 index_col=0)
 # this has the station data
 combined_station_data = station_locations.merge(station_data,
@@ -153,6 +150,7 @@ station_to_city = combined_station_data.to_dict()["City"]
 
 # times of day
 #times_of_day = bike_data["Time of Day"].unique()
+
 combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
 # if there wasn't any rides started, it'll be nan -> fix
 combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
@@ -190,7 +188,7 @@ app.layout = html.Div(
             value=tripmonth,
             clearable=False,
         ),
-   #     dcc.Graph(id="graph"),
+
         dcc.Graph(id="graph2"),
 
         html.Div(className='row', children=[
@@ -199,37 +197,8 @@ app.layout = html.Div(
             ], className='three columns')]
         ),
         dtable
-
     ]
 )
-
-# @app.callback(
-#     Output("graph2", "figure"),
-#     Input("year-dropdown", "value"),
-# )
-# def get_bike_month_data(dropval):
-#     bike_data = get_bike_data(tripdata[dropval])
-#     combined_station_data = station_locations.merge(station_data,
-#                                                     left_index=True, right_index=True, how="left")
-#     # combine city data w ride data
-#     station_to_city = combined_station_data.to_dict()["City"]
-#
-#     combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
-#     # if there wasn't any rides started, it'll be nan -> fix
-#     combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
-#
-#     fig = px.scatter_mapbox(combined_station_data.reset_index(),
-#                             lat="lat",
-#                             lon="lng",
-#                             hover_name="index",
-#                             color_discrete_map=city_pal,
-#                             color="City",
-#                             hover_data="index",
-#                             size="Number of Rides Started",
-#                             zoom=11,
-#                             height=800,
-#                             width=1000)
-#     return fig
 
 @app.callback(
     Output('click-data', 'children'),
@@ -247,6 +216,7 @@ def display_click_data(clickData):
         printstr = "Select a station on the map to continue"
     return printstr
 
+
 @app.callback(
     Output(dtable, "data"),
     Input('graph2', 'clickData'))
@@ -257,9 +227,14 @@ def update_data_table(clickData):
         else:
             start_station = clickData["points"][0]["customdata"][0]
 
-        trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
-
-        report = trips_to.reset_index().rename(columns={"end_station_name":"Destination Station",
+        if "start_station_name" in bike_data.columns:
+            trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
+            report = trips_to.reset_index().rename(columns={"end_station_name": "Destination Station",
+                                                            "count": "Trips"})
+        else:
+            trips_to = bike_data.loc[bike_data["start station name"] == start_station][
+                "end station name"].value_counts()
+            report = trips_to.reset_index().rename(columns={"end station name":"Destination Station",
                                                      "count":"Trips"})
     else:
         report = df
@@ -288,8 +263,10 @@ def display_bike_trips(clickData, yearval):
                                                         left_index=True, right_index=True, how="left")
         # combine city data w ride data
         station_to_city = combined_station_data.to_dict()["City"]
-
-        combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
+        if "start_station_name" in bike_data.columns:
+            combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
+        else:
+            combined_station_data["Number of Rides Started"] = bike_data["start station name"].value_counts()
         # if there wasn't any rides started, it'll be nan -> fix
         combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
 
@@ -312,7 +289,11 @@ def display_bike_trips(clickData, yearval):
         else:
             start_station = clickData["points"][0]["customdata"][0]
 
-        trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
+        if "start_station_name" in bike_data.columns:
+            trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
+        else:
+            trips_to = bike_data.loc[bike_data["start station name"] == start_station][
+                "end station name"].value_counts()
         norm_trip2 = NormalizeData(trips_to)
         trips_to_above = trips_to.loc[trips_to > threshold]
 
