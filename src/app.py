@@ -20,6 +20,7 @@ import zipfile
 import requests
 import io
 import xml.etree.ElementTree as ET
+import gc
 
 #from datetime import datetime, timedelta
 
@@ -257,6 +258,8 @@ def display_bike_trips(clickData, yearval):
         new_month = True
         # means read in new data
         tripmonth = yearval
+        del bike_data
+        gc.collect()
 
         bike_data = get_bike_data(tripdata[tripmonth])
         combined_station_data = station_locations.merge(station_data,
