@@ -14,14 +14,14 @@ import matplotlib.colors as mcolors
 from matplotlib import colormaps
 #from matplotlib.patches import Patch
 #from matplotlib.colors import LogNorm, Normalize
-import json
+#import json
 #from meteostat import Point, Daily, Hourly
 import zipfile
 import requests
 import io
 import xml.etree.ElementTree as ET
-import gc
-import sys
+# import gc
+# import sys
 
 #from datetime import datetime, timedelta
 
@@ -129,7 +129,6 @@ def get_bike_data(s3path):
             csv_extract = name
 
     # look to get column names
-  #  print(pd.read_csv(z.open(csv_extract),nrows=2).columns)
     if "start_station_name" in pd.read_csv(z.open(csv_extract),nrows=2).columns:
         kept_cols = ["ride_id", "start_station_name", "end_station_name"]
     else:
@@ -293,8 +292,9 @@ def display_bike_trips(clickData, yearval):
                             hover_data="index",
                             size="Number of Rides Started",
                             zoom=11,
-                            height=800,
-                            width=1000)
+                           # height=800,
+                          #  width=1000
+                            )
 
     if clickData is not None and not new_month:
         if isinstance(clickData["points"][0]["customdata"], str):
