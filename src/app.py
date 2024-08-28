@@ -21,6 +21,7 @@ import requests
 import io
 import xml.etree.ElementTree as ET
 import gc
+import sys
 
 #from datetime import datetime, timedelta
 
@@ -119,6 +120,7 @@ def get_all_tripdata(s3url):
             tripfiles[month_mapping[month] + " " + str(year)] = s3url+"/"+file
     return tripfiles
 
+
 def get_bike_data(s3path):
     r = requests.get(s3path)
     z = zipfile.ZipFile(io.BytesIO(r.content))
@@ -126,15 +128,20 @@ def get_bike_data(s3path):
         if "__MACOSX" not in name:
             csv_extract = name
 
-    return pd.read_csv(z.open(csv_extract), index_col = 0).dropna()
+    # look to get column names
+  #  print(pd.read_csv(z.open(csv_extract),nrows=2).columns)
+    if "start_station_name" in pd.read_csv(z.open(csv_extract),nrows=2).columns:
+        kept_cols = ["ride_id", "start_station_name", "end_station_name"]
+    else:
+        kept_cols = ["start station name", "end station name"]
+    return pd.read_csv(z.open(csv_extract), usecols=kept_cols).dropna()
 
 # read and format data
 indexurl = "https://s3.amazonaws.com/hubway-data"
 tripdata = get_all_tripdata(indexurl)
 
+# set a starting month value
 tripmonth = "May 2024"
-
-month = "202407"
 bike_data = get_bike_data(tripdata[tripmonth])
 
 # get station locations based on averages
@@ -142,7 +149,9 @@ station_locations = pd.read_csv("../data/geospacial_station_data.csv",
                                 index_col=0)
 # this has the station data
 combined_station_data = station_locations.merge(station_data,
-                                                left_index=True, right_index=True, how="left")
+                                                left_index=True,
+                                                right_index=True,
+                                                how="left")
 # combine city data w ride data
 station_to_city = combined_station_data.to_dict()["City"]
 
@@ -166,7 +175,6 @@ df = combined_station_data.reset_index()[["index","Number of Rides Started"]].co
                                                                                                  ascending=False).rename(columns={"index":"Origin Station","Number of Rides Started":"trips"})
 #### set this as global so it can be updated elsewhere
 dtable = dash_table.DataTable(
-  #  columns=[{"name": i, "id": i} for i in df.columns],
     sort_action="native",
     page_size=10,
     style_table={"overflowX": "auto"},
@@ -179,7 +187,7 @@ dtable = dash_table.DataTable(
 #### This works for rn
 app.layout = html.Div(
     [
-        html.H3("Bluebikes data"),
+        html.H2("Bluebikes data"),
         html.P(
             "Click on a station to see all of the destinations from that station (min " + str(threshold) + " trips)"
         ),
@@ -258,12 +266,14 @@ def display_bike_trips(clickData, yearval):
         new_month = True
         # means read in new data
         tripmonth = yearval
-        del bike_data
-        gc.collect()
+        # del bike_data
+        # gc.collect()
 
         bike_data = get_bike_data(tripdata[tripmonth])
         combined_station_data = station_locations.merge(station_data,
-                                                        left_index=True, right_index=True, how="left")
+                                                        left_index=True,
+                                                        right_index=True,
+                                                        how="left")
         # combine city data w ride data
         station_to_city = combined_station_data.to_dict()["City"]
         if "start_station_name" in bike_data.columns:
