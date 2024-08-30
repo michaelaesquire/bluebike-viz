@@ -28,7 +28,7 @@ import xml.etree.ElementTree as ET
 # TODO: Dropdown for day of the week?
 # TODO: Fix station list to have all.
 
-app = Dash()
+app = Dash(__name__)
 server = app.server
 
 ## read in station data
