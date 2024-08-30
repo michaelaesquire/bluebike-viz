@@ -162,8 +162,9 @@ combined_station_data["Number of Rides Started"] = bike_data["start_station_name
 combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
 # get the stations with the most rides
 df = combined_station_data.reset_index()[["index","Number of Rides Started"]].copy().sort_values("Number of Rides Started",
-                                                                                                 ascending=False).rename(columns={"index":"Origin Station","Number of Rides Started":"trips"})
+                                                                                                 ascending=False).rename(columns={"index":"Origin Station","Number of Rides Started":"Trips"})
 ordered_rides = df
+ordered_rides = ordered_rides.loc[ordered_rides["Trips"]>0]
 
 ## separate dash variable for table view
 dtable = dash_table.DataTable(
@@ -179,9 +180,9 @@ dtable = dash_table.DataTable(
 #### Setup for the app
 app.layout = html.Div(
     [
-        html.H2("Bluebikes data"),
+        html.H2("Visualization of Bluebikes trip data"),
         html.P(
-            "Click on a station to see all of the destinations from that station (min " + str(threshold) + " trips)"
+            "Click on a station to see all of the destinations from that station (min " + str(threshold) + " trips for visualization)."
         ),
         dcc.Dropdown(
             id="year-dropdown",
@@ -191,7 +192,11 @@ app.layout = html.Div(
         ),
 
         dcc.Graph(id="graph2"),
-
+        dcc.Loading(
+                id="loading-1",
+                type="default",
+                children=html.Div(id="loading-output-1")
+            ),
         html.Div(className='row', children=[
             html.Div([
                 html.Pre(id='click-data', style=styles['pre'])
@@ -252,20 +257,21 @@ def update_data_table(clickData):
 @app.callback(
     Output('graph2', 'figure'),
     Output(dtable, "data"),
+    Output("loading-output-1", "children"),
     Input('graph2', 'clickData'),
     Input("year-dropdown", "value"),
-    Input(dtable, 'active_cell')
+  #  Input(dtable, 'active_cell')
 )
-def display_bike_trips(clickData, yearval, clicked_cell):
+def display_bike_trips(clickData, yearval):
     global tripmonth
     global bike_data
     global combined_station_data
     global ordered_rides
 
     new_month = False
-    if clicked_cell is not None:
-        print(ordered_rides.iloc[clicked_cell['row'],clicked_cell['column']])
-
+   # if clicked_cell is not None:
+        #print(ordered_rides.iloc[clicked_cell['row'],clicked_cell['column']])
+    # this means the year was changed
     if tripmonth != yearval:
         new_month = True
         # means read in new data
@@ -286,9 +292,11 @@ def display_bike_trips(clickData, yearval, clicked_cell):
 
         ordered_rides = combined_station_data.reset_index()[["index", "Number of Rides Started"]].copy().sort_values(
             "Number of Rides Started",
-            ascending=False).rename(columns={"index": "Origin Station", "Number of Rides Started": "trips"})
+            ascending=False).rename(columns={"index": "Origin Station", "Number of Rides Started": "Trips"})
 
-    fig = px.scatter_mapbox(combined_station_data.reset_index(),
+        ordered_rides = ordered_rides.loc[ordered_rides["Trips"]>0]
+
+    fig = px.scatter_mapbox(combined_station_data.loc[combined_station_data["Number of Rides Started"]>0].reset_index(),
                             lat="lat",
                             lon="lng",
                             hover_name="index",
@@ -332,7 +340,7 @@ def display_bike_trips(clickData, yearval, clicked_cell):
             ),
 
             )
-    return fig, ordered_rides.to_dict("records")
+    return fig, ordered_rides.to_dict("records"), None
 
 
 if __name__ == '__main__':
