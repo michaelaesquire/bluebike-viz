@@ -133,7 +133,14 @@ def get_bike_data(s3path):
         kept_cols = ["ride_id", "start_station_name", "end_station_name"]
     else:
         kept_cols = ["start station name", "end station name"]
-    return pd.read_csv(z.open(csv_extract), usecols=kept_cols).dropna()
+
+    bike_df = pd.read_csv(z.open(csv_extract), usecols=kept_cols).dropna()
+
+    if "start_station_name" in pd.read_csv(z.open(csv_extract),nrows=2).columns:
+        bike_df = bike_df.loc[bike_df["start_station_name"] != bike_df["end_station_name"]]
+    else:
+        bike_df = bike_df.loc[bike_df["start station name"] != bike_df["end station name"]]
+    return bike_df
 
 # read and format data
 indexurl = "https://s3.amazonaws.com/hubway-data"
@@ -145,34 +152,20 @@ bike_data = get_bike_data(tripdata[tripmonth])
 
 # get station locations based on averages
 station_locations = pd.read_csv("../data/geospacial_station_data.csv",
-                                index_col=0)
-# this has the station data
-combined_station_data = station_locations.merge(station_data,
-                                                left_index=True,
-                                                right_index=True,
-                                                how="left")
-# combine city data w ride data
-station_to_city = combined_station_data.to_dict()["City"]
+                                index_col=0, usecols=["index","lat","lng","City"])
 
-#bike_data["Start City"] = [station_to_city[x] for x in bike_data["start_station_name"]]
-#bike_data["End City"] = [station_to_city[x] for x in bike_data["end_station_name"]]
+combined_station_data = station_locations
 
 # times of day
-#times_of_day = bike_data["Time of Day"].unique()
-
 combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
 # if there wasn't any rides started, it'll be nan -> fix
 combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
-
-# for daytime in times_of_day:
-#     combined_station_data["Number of Rides Started at " + daytime] = \
-#     bike_data.loc[bike_data["Time of Day"] == daytime]["start_station_name"].value_counts()
-#     combined_station_data["Number of Rides Started at " + daytime] = combined_station_data[
-#         "Number of Rides Started at " + daytime].fillna(0)
-
+# get the stations with the most rides
 df = combined_station_data.reset_index()[["index","Number of Rides Started"]].copy().sort_values("Number of Rides Started",
                                                                                                  ascending=False).rename(columns={"index":"Origin Station","Number of Rides Started":"trips"})
-#### set this as global so it can be updated elsewhere
+ordered_rides = df
+
+## separate dash variable for table view
 dtable = dash_table.DataTable(
     sort_action="native",
     page_size=10,
@@ -183,7 +176,7 @@ dtable = dash_table.DataTable(
 )
 
 
-#### This works for rn
+#### Setup for the app
 app.layout = html.Div(
     [
         html.H2("Bluebikes data"),
@@ -226,9 +219,15 @@ def display_click_data(clickData):
 
 
 @app.callback(
-    Output(dtable, "data"),
-    Input('graph2', 'clickData'))
+    Output(dtable, "data", allow_duplicate=True),
+    Output(dtable,'active_cell'),
+    Output(dtable, "selected_cells"),
+    Input('graph2', 'clickData'),
+    prevent_initial_call=True)
 def update_data_table(clickData):
+    global ordered_rides
+    global tripmonth
+
     if clickData is not None:
         if isinstance(clickData["points"][0]["customdata"], str):
             start_station = clickData["points"][0]["customdata"]
@@ -246,20 +245,26 @@ def update_data_table(clickData):
                                                      "count":"Trips"})
     else:
         report = df
-
-    return(report.to_dict("records"))
+    ordered_rides = report
+    return report.to_dict("records"), None, []
 
 
 @app.callback(
     Output('graph2', 'figure'),
+    Output(dtable, "data"),
     Input('graph2', 'clickData'),
-    Input("year-dropdown", "value"))
-def display_bike_trips(clickData, yearval):
+    Input("year-dropdown", "value"),
+    Input(dtable, 'active_cell')
+)
+def display_bike_trips(clickData, yearval, clicked_cell):
     global tripmonth
     global bike_data
     global combined_station_data
+    global ordered_rides
 
     new_month = False
+    if clicked_cell is not None:
+        print(ordered_rides.iloc[clicked_cell['row'],clicked_cell['column']])
 
     if tripmonth != yearval:
         new_month = True
@@ -269,12 +274,9 @@ def display_bike_trips(clickData, yearval):
         # gc.collect()
 
         bike_data = get_bike_data(tripdata[tripmonth])
-        combined_station_data = station_locations.merge(station_data,
-                                                        left_index=True,
-                                                        right_index=True,
-                                                        how="left")
+        combined_station_data = station_locations
+
         # combine city data w ride data
-        station_to_city = combined_station_data.to_dict()["City"]
         if "start_station_name" in bike_data.columns:
             combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
         else:
@@ -282,6 +284,9 @@ def display_bike_trips(clickData, yearval):
         # if there wasn't any rides started, it'll be nan -> fix
         combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
 
+        ordered_rides = combined_station_data.reset_index()[["index", "Number of Rides Started"]].copy().sort_values(
+            "Number of Rides Started",
+            ascending=False).rename(columns={"index": "Origin Station", "Number of Rides Started": "trips"})
 
     fig = px.scatter_mapbox(combined_station_data.reset_index(),
                             lat="lat",
@@ -318,8 +323,8 @@ def display_bike_trips(clickData, yearval):
                 mode="lines",
                 opacity=0.8,
                 customdata=[start_station, end_station],
-                lon=[combined_station_data.loc[start_station]["Long"], combined_station_data.loc[end_station]["Long"]],
-                lat=[combined_station_data.loc[start_station]["Lat"], combined_station_data.loc[end_station]["Lat"]],
+                lon=[combined_station_data.loc[start_station]["lng"], combined_station_data.loc[end_station]["lng"]],
+                lat=[combined_station_data.loc[start_station]["lat"], combined_station_data.loc[end_station]["lat"]],
                 hovertext=strtobr(trip_text),
                 line={'width': np.floor(trips_to_above[trip] / 10 + 1),
                       "color": mcolors.rgb2hex(cmap(norm_trip2[trip]))},
@@ -327,7 +332,7 @@ def display_bike_trips(clickData, yearval):
             ),
 
             )
-    return fig
+    return fig, ordered_rides.to_dict("records")
 
 
 if __name__ == '__main__':
