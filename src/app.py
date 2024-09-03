@@ -1,4 +1,4 @@
-from dash import Dash, html, dcc, Input, Output, dash_table
+from dash import Dash, html, dcc, Input, Output, dash_table, callback_context
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -9,6 +9,7 @@ import zipfile
 import requests
 import io
 import xml.etree.ElementTree as ET
+import json
 
 # TODO: Dropdown for day of the week?
 # TODO: Fix station list to have all.
@@ -187,8 +188,6 @@ app.layout = html.Div(
                     )
                  ]
         ),
-
-
         html.Div(
             html.Pre(id='click-data', style=styles['pre'])
         ),
@@ -253,10 +252,14 @@ def display_bike_trips(clickData, yearval):
     global ordered_rides
 
     new_month = False
+
+    # ctx = callback_context
+    # clicked = ctx.triggered[0]['prop_id'].split('.')[0]
+    # print(clicked == "")
+    num_trips_formatted = "{0:,.0f}".format(bike_data.shape[0])
    # if clicked_cell is not None:
         #print(ordered_rides.iloc[clicked_cell['row'],clicked_cell['column']])
     # initial callback
-    printstr = "Select a station on the map to continue"
     # this means the year was changed - do callback based on that
     if tripmonth != yearval:
         new_month = True
@@ -266,8 +269,8 @@ def display_bike_trips(clickData, yearval):
         # gc.collect()
 
         bike_data = get_bike_data(tripdata[tripmonth])
+        num_trips_formatted = "{0:,.0f}".format(bike_data.shape[0])
         combined_station_data = station_locations
-
         # combine city data w ride data
         if "start_station_name" in bike_data.columns:
             combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
@@ -282,6 +285,7 @@ def display_bike_trips(clickData, yearval):
 
         ordered_rides = ordered_rides.loc[ordered_rides["Trips"]>0]
 
+    printstr = num_trips_formatted + " total trips in " + tripmonth
     fig = px.scatter_mapbox(combined_station_data.loc[combined_station_data["Number of Rides Started"]>0].reset_index(),
                             lat="lat",
                             lon="lng",
@@ -294,7 +298,6 @@ def display_bike_trips(clickData, yearval):
                         #    height=600,
                           #  width=1000
                             )
-
     # this is the callback for a click
     if clickData is not None and not new_month:
         if isinstance(clickData["points"][0]["customdata"], str):
