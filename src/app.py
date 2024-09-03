@@ -168,7 +168,7 @@ app.layout = html.Div(
         html.H2("Visualization of Bluebikes trip data"),
         html.H4("Developed by Michaela Olson"),
         html.P(
-            "Click on a station to see all of the destinations from that station (min " + str(threshold) + " trips for visualization)."
+            "Select a month of Bluebike trip data to view, then click on a station to see all of the destinations from that station (minimum of " + str(threshold) + " trips for visualization)."
         ),
         dcc.Dropdown(
             id="year-dropdown",
@@ -177,42 +177,34 @@ app.layout = html.Div(
             clearable=False,
         ),
 
-        dcc.Graph(id="graph2"),
-        dcc.Loading(
-                id="loading-1",
-                type="default",
-                children=html.Div(id="loading-output-1")
-            ),
-        html.Div(className='row', children=[
-            html.Div([
-                html.Pre(id='click-data', style=styles['pre'])
-            ], className='three columns')]
+        html.Div(id = "graph-container",
+                 children=[
+                    dcc.Graph(id="graph2"),
+                    dcc.Loading(
+                        id="loading-1",
+                        type="default",
+                        children=html.Div(id="loading-output-1")
+                    )
+                 ]
+        ),
+
+
+        html.Div(
+            html.Pre(id='click-data', style=styles['pre'])
         ),
         dtable,
         html.Div([
             html.Footer("Code publicly available at ", style={"display":"inline"}),
             html.A("github.com/michaelaesquire/bluebike-viz",href="https://github.com/michaelaesquire/bluebike-viz")
             ]
+        ),
+        html.Div([
+            html.Footer("Bluebikes trip data publicly available at ", style={"display":"inline"}),
+            html.A("bluebikes.com/system-data",href="https://bluebikes.com/system-data")
+            ]
         )
     ]
 )
-
-@app.callback(
-    Output('click-data', 'children'),
-    Input('graph2', 'clickData'))
-def display_click_data(clickData):
-    if clickData is not None:
-        if isinstance(clickData["points"][0]["customdata"], str):
-            start_station = clickData["points"][0]["customdata"]
-        else:
-            start_station = clickData["points"][0]["customdata"][0]
-
-      #  print(combined_station_data.loc[start_station,"Number of Rides Started"])
-        printstr = "Origin: " + start_station + " (" + str(int(combined_station_data.loc[start_station,"Number of Rides Started"])) + " total trips)"
-    else:
-        printstr = "Select a station on the map to continue"
-    return printstr
-
 
 @app.callback(
     Output(dtable, "data", allow_duplicate=True),
@@ -249,6 +241,7 @@ def update_data_table(clickData):
     Output('graph2', 'figure'),
     Output(dtable, "data"),
     Output("loading-output-1", "children"),
+    Output('click-data', 'children'),
     Input('graph2', 'clickData'),
     Input("year-dropdown", "value"),
   #  Input(dtable, 'active_cell')
@@ -262,7 +255,9 @@ def display_bike_trips(clickData, yearval):
     new_month = False
    # if clicked_cell is not None:
         #print(ordered_rides.iloc[clicked_cell['row'],clicked_cell['column']])
-    # this means the year was changed
+    # initial callback
+    printstr = "Select a station on the map to continue"
+    # this means the year was changed - do callback based on that
     if tripmonth != yearval:
         new_month = True
         # means read in new data
@@ -296,10 +291,11 @@ def display_bike_trips(clickData, yearval):
                             hover_data="index",
                             size="Number of Rides Started",
                             zoom=11,
-                           # height=800,
+                        #    height=600,
                           #  width=1000
                             )
 
+    # this is the callback for a click
     if clickData is not None and not new_month:
         if isinstance(clickData["points"][0]["customdata"], str):
             start_station = clickData["points"][0]["customdata"]
@@ -331,7 +327,12 @@ def display_bike_trips(clickData, yearval):
             ),
 
             )
-    return fig, ordered_rides.to_dict("records"), None
+        printstr = "Origin: " + start_station + " (" + str(
+            int(combined_station_data.loc[start_station, "Number of Rides Started"])) + " total trips)"
+    fig.update_layout(
+        margin={"l":30, "r": 30, "t":30, "b":20},
+    )
+    return fig, ordered_rides.to_dict("records"), None, printstr
 
 
 if __name__ == '__main__':

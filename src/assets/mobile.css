@@ -2,5 +2,15 @@ body {
     font-family: sans-serif;
 }
 h1, h2 {
-    color: blue
+    color: blue;
+}
+
+#graph2 {
+    padding: 0;
+    margin: 0
+}
+
+#loading-1 {
+    padding: 0;
+    margin: 0
 }
