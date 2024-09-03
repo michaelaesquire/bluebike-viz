@@ -261,6 +261,11 @@ def display_bike_trips(clickData, yearval):
         #print(ordered_rides.iloc[clicked_cell['row'],clicked_cell['column']])
     # initial callback
     # this means the year was changed - do callback based on that
+    ordered_rides = combined_station_data.reset_index()[["index", "Number of Rides Started"]].copy().sort_values(
+        "Number of Rides Started",
+        ascending=False).rename(columns={"index": "Origin Station", "Number of Rides Started": "Trips"})
+
+    ordered_rides = ordered_rides.loc[ordered_rides["Trips"] > 0]
     if tripmonth != yearval:
         new_month = True
         # means read in new data
