@@ -1,29 +1,14 @@
 from dash import Dash, html, dcc, Input, Output, dash_table
 import pandas as pd
-#import seaborn as sns
-#import matplotlib.pyplot as plt
 import numpy as np
-#import scipy
-#from datetime import datetime
-#import geopy.distance
-#from geopy.geocoders import Nominatim
 import plotly.express as px
 import plotly.graph_objects as go
-#import random
 import matplotlib.colors as mcolors
 from matplotlib import colormaps
-#from matplotlib.patches import Patch
-#from matplotlib.colors import LogNorm, Normalize
-#import json
-#from meteostat import Point, Daily, Hourly
 import zipfile
 import requests
 import io
 import xml.etree.ElementTree as ET
-# import gc
-# import sys
-
-#from datetime import datetime, timedelta
 
 # TODO: Dropdown for day of the week?
 # TODO: Fix station list to have all.
@@ -181,6 +166,7 @@ dtable = dash_table.DataTable(
 app.layout = html.Div(
     [
         html.H2("Visualization of Bluebikes trip data"),
+        html.H4("Developed by Michaela Olson"),
         html.P(
             "Click on a station to see all of the destinations from that station (min " + str(threshold) + " trips for visualization)."
         ),
@@ -202,7 +188,12 @@ app.layout = html.Div(
                 html.Pre(id='click-data', style=styles['pre'])
             ], className='three columns')]
         ),
-        dtable
+        dtable,
+        html.Div([
+            html.Footer("Code publicly available at ", style={"display":"inline"}),
+            html.A("github.com/michaelaesquire/bluebike-viz",href="https://github.com/michaelaesquire/bluebike-viz")
+            ]
+        )
     ]
 )
 
