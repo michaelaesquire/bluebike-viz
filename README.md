@@ -6,4 +6,4 @@ App live at https://bluebike-dash-app.onrender.com/
 
 Bluebikes system trip data located at https://bluebikes.com/system-data
 
-![alt text](src/assets/dashboard_preview.png)
+![Preview of dashboard](images/dashboard_preview_video.mov)
