@@ -12,7 +12,11 @@ import xml.etree.ElementTree as ET
 import json
 
 # TODO: Dropdown for day of the week?
-# TODO: Fix station list to have all.
+# TODO: Allow clicking on table to select station
+#     Output(dtable,'active_cell'),
+#     Output(dtable, "selected_cells"),
+#     return None, []
+
 
 app = Dash(__name__)
 server = app.server
@@ -132,24 +136,21 @@ def get_bike_data(s3path):
 indexurl = "https://s3.amazonaws.com/hubway-data"
 tripdata = get_all_tripdata(indexurl)
 
-# set a starting month value
-tripmonth = "May 2024"
+# set a starting month value - going with most recent
+tripmonth = list(tripdata.keys())[-1]
 bike_data = get_bike_data(tripdata[tripmonth])
 
 # get station locations based on averages
-station_locations = pd.read_csv("../data/geospacial_station_data.csv",
+combined_station_data = pd.read_csv("../data/geospacial_station_data.csv",
                                 index_col=0, usecols=["index","lat","lng","City"])
-
-combined_station_data = station_locations
 
 # times of day
 combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
 # if there wasn't any rides started, it'll be nan -> fix
 combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
 # get the stations with the most rides
-df = combined_station_data.reset_index()[["index","Number of Rides Started"]].copy().sort_values("Number of Rides Started",
+ordered_rides = combined_station_data.reset_index()[["index","Number of Rides Started"]].copy().sort_values("Number of Rides Started",
                                                                                                  ascending=False).rename(columns={"index":"Origin Station","Number of Rides Started":"Trips"})
-ordered_rides = df
 ordered_rides = ordered_rides.loc[ordered_rides["Trips"]>0]
 
 ## separate dash variable for table view
@@ -173,7 +174,7 @@ app.layout = html.Div(
         ),
         dcc.Dropdown(
             id="year-dropdown",
-            options=list(tripdata.keys()),
+            options=list(reversed(tripdata.keys())),
             value=tripmonth,
             clearable=False,
         ),
@@ -206,37 +207,6 @@ app.layout = html.Div(
 )
 
 @app.callback(
-    Output(dtable, "data", allow_duplicate=True),
-    Output(dtable,'active_cell'),
-    Output(dtable, "selected_cells"),
-    Input('graph2', 'clickData'),
-    prevent_initial_call=True)
-def update_data_table(clickData):
-    global ordered_rides
-    global tripmonth
-
-    if clickData is not None:
-        if isinstance(clickData["points"][0]["customdata"], str):
-            start_station = clickData["points"][0]["customdata"]
-        else:
-            start_station = clickData["points"][0]["customdata"][0]
-
-        if "start_station_name" in bike_data.columns:
-            trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
-            report = trips_to.reset_index().rename(columns={"end_station_name": "Destination Station",
-                                                            "count": "Trips"})
-        else:
-            trips_to = bike_data.loc[bike_data["start station name"] == start_station][
-                "end station name"].value_counts()
-            report = trips_to.reset_index().rename(columns={"end station name":"Destination Station",
-                                                     "count":"Trips"})
-    else:
-        report = df
-    ordered_rides = report
-    return report.to_dict("records"), None, []
-
-
-@app.callback(
     Output('graph2', 'figure'),
     Output(dtable, "data"),
     Output("loading-output-1", "children"),
@@ -260,11 +230,10 @@ def display_bike_trips(clickData, yearval):
    # if clicked_cell is not None:
         #print(ordered_rides.iloc[clicked_cell['row'],clicked_cell['column']])
     # initial callback
-    # this means the year was changed - do callback based on that
     ordered_rides = combined_station_data.reset_index()[["index", "Number of Rides Started"]].copy().sort_values(
         "Number of Rides Started",
         ascending=False).rename(columns={"index": "Origin Station", "Number of Rides Started": "Trips"})
-
+    # this means the year was changed - do callback based on that
     ordered_rides = ordered_rides.loc[ordered_rides["Trips"] > 0]
     if tripmonth != yearval:
         new_month = True
@@ -275,7 +244,6 @@ def display_bike_trips(clickData, yearval):
 
         bike_data = get_bike_data(tripdata[tripmonth])
         num_trips_formatted = "{0:,.0f}".format(bike_data.shape[0])
-        combined_station_data = station_locations
         # combine city data w ride data
         if "start_station_name" in bike_data.columns:
             combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
@@ -312,9 +280,14 @@ def display_bike_trips(clickData, yearval):
 
         if "start_station_name" in bike_data.columns:
             trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
+            ordered_rides = trips_to.reset_index().rename(columns={"end_station_name": "Destination Station",
+                                                            "count": "Trips"})
         else:
             trips_to = bike_data.loc[bike_data["start station name"] == start_station][
                 "end station name"].value_counts()
+            ordered_rides = trips_to.reset_index().rename(columns={"end station name": "Destination Station",
+                                                            "count": "Trips"})
+
         norm_trip2 = NormalizeData(trips_to)
         trips_to_above = trips_to.loc[trips_to > threshold]
 
