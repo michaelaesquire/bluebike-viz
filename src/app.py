@@ -121,15 +121,17 @@ def get_bike_data(s3path):
     # look to get column names
     if "start_station_name" in pd.read_csv(z.open(csv_extract),nrows=2).columns:
         kept_cols = ["ride_id", "start_station_name", "end_station_name"]
+        bike_df = pd.read_csv(z.open(csv_extract), usecols=kept_cols).dropna()
     else:
         kept_cols = ["start station name", "end station name"]
+        bike_df = pd.read_csv(z.open(csv_extract), usecols=kept_cols).dropna()
+        # rename to make consistent going forward
+        bike_df.rename(columns={"start station name":"start_station_name",
+                                "end station name":"end_station_name"
+                                },inplace=True)
 
-    bike_df = pd.read_csv(z.open(csv_extract), usecols=kept_cols).dropna()
-
-    if "start_station_name" in pd.read_csv(z.open(csv_extract),nrows=2).columns:
-        bike_df = bike_df.loc[bike_df["start_station_name"] != bike_df["end_station_name"]]
-    else:
-        bike_df = bike_df.loc[bike_df["start station name"] != bike_df["end station name"]]
+    # removes trips to own station
+    bike_df = bike_df.loc[bike_df["start_station_name"] != bike_df["end_station_name"]]
     return bike_df
 
 # read and format data
@@ -141,8 +143,10 @@ tripmonth = list(tripdata.keys())[-1]
 bike_data = get_bike_data(tripdata[tripmonth])
 
 # get station locations based on averages
-combined_station_data = pd.read_csv("../data/geospacial_station_data.csv",
+station_locations = pd.read_csv("../data/geospacial_station_data.csv",
                                 index_col=0, usecols=["index","lat","lng","City"])
+
+combined_station_data = station_locations
 
 # times of day
 combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
@@ -244,11 +248,9 @@ def display_bike_trips(clickData, yearval):
 
         bike_data = get_bike_data(tripdata[tripmonth])
         num_trips_formatted = "{0:,.0f}".format(bike_data.shape[0])
-        # combine city data w ride data
-        if "start_station_name" in bike_data.columns:
-            combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
-        else:
-            combined_station_data["Number of Rides Started"] = bike_data["start station name"].value_counts()
+        # add on the number of rides from the month
+        combined_station_data = station_locations
+        combined_station_data["Number of Rides Started"] = bike_data["start_station_name"].value_counts()
         # if there wasn't any rides started, it'll be nan -> fix
         combined_station_data["Number of Rides Started"] = combined_station_data["Number of Rides Started"].fillna(0)
 
@@ -278,15 +280,9 @@ def display_bike_trips(clickData, yearval):
         else:
             start_station = clickData["points"][0]["customdata"][0]
 
-        if "start_station_name" in bike_data.columns:
-            trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
-            ordered_rides = trips_to.reset_index().rename(columns={"end_station_name": "Destination Station",
-                                                            "count": "Trips"})
-        else:
-            trips_to = bike_data.loc[bike_data["start station name"] == start_station][
-                "end station name"].value_counts()
-            ordered_rides = trips_to.reset_index().rename(columns={"end station name": "Destination Station",
-                                                            "count": "Trips"})
+        trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
+        ordered_rides = trips_to.reset_index().rename(columns={"end_station_name": "Destination Station",
+                                                               "count": "Trips"})
 
         norm_trip2 = NormalizeData(trips_to)
         trips_to_above = trips_to.loc[trips_to > threshold]
