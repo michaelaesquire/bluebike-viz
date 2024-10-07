@@ -109,6 +109,7 @@ def get_all_tripdata(s3url):
 
 
 def get_bike_data(s3path):
+    pattern = r'\s(\d{2}):'
     r = requests.get(s3path)
     z = zipfile.ZipFile(io.BytesIO(r.content))
     for name in z.namelist():
@@ -117,18 +118,21 @@ def get_bike_data(s3path):
 
     # look to get column names
     if "start_station_name" in pd.read_csv(z.open(csv_extract),nrows=2).columns:
-        kept_cols = ["ride_id", "start_station_name", "end_station_name"]
+        kept_cols = ["ride_id", "start_station_name", "end_station_name","started_at"]
         bike_df = pd.read_csv(z.open(csv_extract), usecols=kept_cols).dropna()
     else:
-        kept_cols = ["start station name", "end station name"]
+        kept_cols = ["start station name", "end station name","starttime"]
         bike_df = pd.read_csv(z.open(csv_extract), usecols=kept_cols).dropna()
         # rename to make consistent going forward
         bike_df.rename(columns={"start station name":"start_station_name",
-                                "end station name":"end_station_name"
+                                "end station name":"end_station_name",
+                                "starttime":"started_at"
                                 },inplace=True)
 
     # removes trips to own station
     bike_df = bike_df.loc[bike_df["start_station_name"] != bike_df["end_station_name"]]
+    bike_df["start hour"] = bike_df['started_at'].str.extract(pattern, expand=True).astype(int)
+
     return bike_df
 
 ORIGIN_DESTINATION = "Number of Rides Started"
@@ -197,6 +201,7 @@ app.layout = html.Div(
             value=tripmonth,
             clearable=False,
         ),
+        dcc.RangeSlider(0, 24, 1, value=[0, 24], id='hour-range'),
         daq.BooleanSwitch(id='origin-destination-switch', on=False,
                           label="Off = Number of trips originating from station. On = Number of trips ending at station.",
                           labelPosition="top"
@@ -235,10 +240,11 @@ app.layout = html.Div(
     Output('click-data', 'children'),
     Input('graph2', 'clickData'),
     Input("year-dropdown", "value"),
-    Input("origin-destination-switch","on")
+    Input("origin-destination-switch","on"),
+    Input('hour-range', 'value')
   #  Input(dtable, 'active_cell')
 )
-def display_bike_trips(clickData, yearval, origin_destination):
+def display_bike_trips(clickData, yearval, origin_destination, hour_range):
     global tripmonth
     global bike_data
     global combined_station_data
@@ -257,9 +263,10 @@ def display_bike_trips(clickData, yearval, origin_destination):
     num_trips_formatted = "{0:,.0f}".format(bike_data.shape[0])
    # if clicked_cell is not None:
         #print(ordered_rides.iloc[clicked_cell['row'],clicked_cell['column']])
-    if clicked == "origin-destination-switch":
-        combined_station_data = get_ride_sum(station_locations, bike_data)
-        ordered_rides = get_ordered_rides(combined_station_data)
+    #if clicked == "origin-destination-switch":
+    combined_station_data = get_ride_sum(station_locations,
+                                         bike_data.loc[bike_data["start hour"].between(hour_range[0],hour_range[1])])
+    ordered_rides = get_ordered_rides(combined_station_data)
 
     # this means the year was changed - do callback based on that
     if clicked == "year-dropdown":
@@ -271,7 +278,8 @@ def display_bike_trips(clickData, yearval, origin_destination):
         bike_data = get_bike_data(tripdata[tripmonth])
         num_trips_formatted = "{0:,.0f}".format(bike_data.shape[0])
         # add on the number of rides from the month
-        combined_station_data  = get_ride_sum(station_locations,bike_data)
+        combined_station_data  = get_ride_sum(station_locations,
+                                              bike_data.loc[bike_data["start hour"].between(hour_range[0],hour_range[1])])
         ordered_rides = get_ordered_rides(combined_station_data)
 
     printstr = num_trips_formatted + " total trips in " + tripmonth
@@ -296,14 +304,14 @@ def display_bike_trips(clickData, yearval, origin_destination):
 
 
         if origin_destination:
-            trips_to = bike_data.loc[bike_data["end_station_name"] == start_station]["start_station_name"].value_counts()
+            trips_to = bike_data.loc[(bike_data["end_station_name"] == start_station) & bike_data["start hour"].between(hour_range[0],hour_range[1])]["start_station_name"].value_counts()
             ordered_rides = trips_to.reset_index().rename(columns={"start_station_name": "Trip Origin Station",
                                                                    "count": "Trips"})
             printstr = "Destination: " + start_station + " (" + str(
                 int(combined_station_data.loc[start_station, ORIGIN_DESTINATION])) + " total trips)"
 
         else:
-            trips_to = bike_data.loc[bike_data["start_station_name"] == start_station]["end_station_name"].value_counts()
+            trips_to = bike_data.loc[(bike_data["start_station_name"] == start_station) & bike_data["start hour"].between(hour_range[0],hour_range[1])]["end_station_name"].value_counts()
             ordered_rides = trips_to.reset_index().rename(columns={"end_station_name": "Trip Destination Station",
                                                                    "count": "Trips"})
             printstr = "Origin: " + start_station + " (" + str(
