@@ -55,6 +55,8 @@ styles = {
     }
 }
 
+ADVANCED_VIEW = False
+
 # start mapbox
 maptoken = open(".mapbox").read()
 px.set_mapbox_access_token(maptoken)
@@ -201,11 +203,13 @@ app.layout = html.Div(
             value=tripmonth,
             clearable=False,
         ),
+        html.Div(id="advanced-options",
+                 children=[
         dcc.RangeSlider(0, 24, 1, value=[0, 24], id='hour-range'),
         daq.BooleanSwitch(id='origin-destination-switch', on=False,
                           label="Off = Number of trips originating from station. On = Number of trips ending at station.",
                           labelPosition="top"
-                          ),
+                          )], style= {'display': 'none'}),
         html.Div(id = "graph-container",
                  children=[
                     dcc.Graph(id="graph2"),
