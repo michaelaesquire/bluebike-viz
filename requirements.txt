@@ -4,4 +4,3 @@ pandas
 matplotlib
 dash-tools
 requests
-dash-daq
